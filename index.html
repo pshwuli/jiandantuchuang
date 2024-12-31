@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简单图床</title>
+    <style>
+        body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    background: url('https://luofang.serv00.net/img/Image_1735563265.jpg') no-repeat center center fixed;
+    background-size: cover;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    backdrop-filter: blur(8px); /* 只对背景应用高斯模糊效果 */
+}
+
+.upload-container {
+    margin-top: 20px;
+    text-align: center;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.gallery {
+    width: 90%;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    padding: 20px;
+    box-sizing: border-box;
+    column-count: 4;
+    column-gap: 10px;
+}
+
+.gallery-item {
+    position: relative;
+    break-inside: avoid;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.gallery-item img,
+.gallery-item video {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.gallery img:hover,
+.gallery video:hover {
+    transform: scale(1.05);
+}
+
+.gallery img.deleting,
+.gallery video.deleting {
+    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+    transform: translateX(-100%);
+    opacity: 0;
+}
+
+.gallery img.marked,
+.gallery video.marked {
+    border: 5px solid rgba(255, 0, 0, 0.5);
+}
+
+#uploadBtn {
+    margin-bottom: 20px;
+    display: block; /* 使按钮整体显示 */
+    width: 100%; /* 使按钮宽度为100% */
+    padding: 10px; /* 根据需要调整按钮内边距 */
+}
+
+.actions {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    text-align: center;
+    padding: 10px 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.actions button {
+    flex: 1;
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+
+.gallery-item:hover .actions {
+    opacity: 1;
+}
+
+.gallery-item.clicked img {
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#progressBarContainer {
+    width: 80%;
+    margin: 20px auto;
+    background-color: #f3f3f3;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    display: none;
+}
+
+#progressBar {
+    width: 0;
+    height: 20px;
+    background-color: #4caf50;
+    border-radius: 5px;
+}
+
+.popup {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #4caf50;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .gallery {
+        column-count: 3;
+    }
+}
+
+@media (max-width: 768px) {
+    .gallery {
+        column-count: 2;
+    }
+}
+
+@media (max-width: 480px) {
+    .gallery {
+        column-count: 1;
+    }
+}
+
+
+    </style>
+</head>
+<body>
+    <div class="upload-container">
+        <input type="file" id="uploadBtn" accept="image/*,video/*" multiple>
+    </div>
+    <div id="progressBarContainer">
+        <div id="progressBar"></div>
+    </div>
+    <div class="gallery" id="gallery"></div>
+    <div class="popup" id="popup">Upload Successful!</div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const gallery = document.getElementById("gallery");
+            const uploadBtn = document.getElementById("uploadBtn");
+            const progressBarContainer = document.getElementById("progressBarContainer");
+            const progressBar = document.getElementById("progressBar");
+            const popup = document.getElementById("popup");
+            const longPressDuration = 500;
+            let touchTimer = null;
+
+            // Function to determine if the device is mobile
+            function isMobileDevice() {
+                return /Mobi|Android/i.test(navigator.userAgent);
+            }
+
+            uploadBtn.addEventListener("change", function(event) {
+                Array.from(event.target.files).forEach(file => {
+                    const formData = new FormData();
+                    formData.append("file", file);
+
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'upload.php', true);
+
+                    xhr.upload.onprogress = function(event) {
+                        if (event.lengthComputable) {
+                            const percentComplete = (event.loaded / event.total) * 100;
+                            progressBar.style.width = percentComplete + '%';
+                        }
+                    };
+
+                    xhr.onloadstart = function() {
+                        progressBarContainer.style.display = 'block';
+                    };
+
+                    xhr.onloadend = function() {
+                        progressBarContainer.style.display = 'none';
+                        progressBar.style.width = '0%';
+                    };
+
+                    xhr.onload = function() {
+                        if (xhr.status === 200) {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response.code === 200) {
+                                let mediaElement;
+                                if (response.img) {
+                                    mediaElement = createMediaElement(response.img, 'img');
+                                } else if (response.video) {
+                                    mediaElement = createMediaElement(response.video, 'video');
+                                }
+                                gallery.appendChild(mediaElement);
+                                showPopup("上传成功!");
+                            } else {
+                                console.error('上传失败:', response.msg);
+                            }
+                        } else {
+                            console.error('上传失败, 服务器返回状态码:', xhr.status);
+                        }
+                    };
+
+                    xhr.send(formData);
+                });
+            });
+
+            fetch('images.php')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.images && data.images.length > 0) {
+                        data.images.forEach(src => {
+                            const mediaElement = createMediaElement(src, 'img');
+                            gallery.appendChild(mediaElement);
+                        });
+                    }
+                    if (data.videos && data.videos.length > 0) {
+                        data.videos.forEach(src => {
+                            const mediaElement = createMediaElement(src, 'video');
+                            gallery.appendChild(mediaElement);
+                        });
+                    }
+                })
+                .catch(error => console.error('获取图像和视频时出错:', error));
+
+            function createMediaElement(src, type) {
+                const mediaElement = document.createElement('div');
+                mediaElement.className = 'gallery-item';
+                let element;
+                if (type === 'img') {
+                    element = document.createElement('img');
+                    element.src = src;
+                    element.alt = 'Image';
+                } else {
+                    element = document.createElement('video');
+                    element.src = src;
+                    element.controls = true;
+                    element.alt = 'Video';
+                }
+
+                element.oncontextmenu = function(event) {
+                    event.preventDefault();
+                    copyToClipboard(src);
+                };
+
+                element.addEventListener('touchstart', function(event) {
+                    touchTimer = setTimeout(() => copyToClipboard(src), longPressDuration);
+                }, false);
+
+                element.addEventListener('touchend', function() {
+                    if (touchTimer) clearTimeout(touchTimer);
+                }, false);
+
+                const actions = document.createElement('div');
+                actions.className = 'actions';
+                const copyButton = document.createElement('button');
+                copyButton.textContent = '复制链接';
+                copyButton.onclick = function() { copyToClipboard(src); };
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-button';
+                deleteButton.textContent = '删除';
+                deleteButton.onclick = function() { deleteMedia(mediaElement, src); };
+                actions.appendChild(copyButton);
+                actions.appendChild(deleteButton);
+                mediaElement.appendChild(element);
+                mediaElement.appendChild(actions);
+                return mediaElement;
+            }
+
+            function copyToClipboard(src) {
+                const url = new URL(src, window.location.origin).href;
+                navigator.clipboard.writeText(url)
+                    .then(() => {
+                        if (!isMobileDevice()) {
+                            alert('链接已复制到剪贴板');
+                        }
+                    })
+                    .catch(err => console.error('复制失败:', err));
+            }
+
+            function deleteMedia(mediaElement, src) {
+                mediaElement.classList.add('clicked');
+
+                setTimeout(() => {
+                    fetch('delete.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ filename: src.split('/').pop() })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.code === 200) {
+                            gallery.removeChild(mediaElement);
+                            showPopup('删除成功');
+                        } else {
+                            console.error('删除失败:', data.msg);
+                        }
+                    })
+                    .catch(error => console.error('删除媒体时出错:', error));
+                }, 300);
+            }
+
+            function showPopup(message) {
+                popup.textContent = message;
+                popup.style.display = 'block';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                }, 2000);
+            }
+        });
+    </script>
+</body>
+</html>
